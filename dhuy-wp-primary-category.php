@@ -12,6 +12,8 @@ Text Domain:  dhuy
 Domain Path:  /languages
 */
 
+defined( 'ABSPATH' ) or die( 'Thou shall not pass!' );
+
 /**
  * Register meta box
  */
@@ -48,21 +50,61 @@ function display_meta_box( $post ) {
  * @param int $post_id Post ID
  */
 function save_meta_box( $post_id ) {
-	$primary_category = (int) $_POST["dhuy_primary_category"];
-	
+	if ( ! isset( $_POST["dhuy_primary_category"] ) ) {
+		return;
+	}
+
 	// verify our nonce
 	if ( ! wp_verify_nonce( $_POST['dhuy_primary_category_save_nonce'], 'dhuy_primary_category_save' ) ) {
 		return;
 	}
+
+	$primary_category = (int) $_POST["dhuy_primary_category"];
 
 	if ( ! add_post_meta( $post_id, "dhuy_primary_category", $primary_category, true ) ) {
 		update_post_meta( $post_id, "dhuy_primary_category", $primary_category );
 	}
 
 	// Append primary category to categories in case it wasn't selected
-	wp_set_post_categories( $post_id, [$primary_category], true );
+	wp_set_post_categories( $post_id, [ $primary_category ], true );
 
 	return $post_id;
 }
 
 add_action( 'save_post', 'save_meta_box' );
+
+/**
+ * Get all posts with given category as primary category
+ *
+ * @param int $primary_category Category ID
+ *
+ * @return array $query WordPress Query
+ */
+function get_posts_by_primary_category( $primary_category ) {
+	$primary_category = (int) $primary_category;
+	if ( ! $primary_category > 0 ) {
+		return;
+	}
+
+	$meta_query_args = array(
+		array(
+			'key'     => 'dhuy_primary_category',
+			'value'   => $primary_category,
+			'compare' => '='
+		)
+	);
+	$query           = new WP_Meta_Query( $meta_query_args );
+
+	return $query;
+}
+
+add_filter( 'dhuy_get_posts_by_primary_category', 'get_posts_by_primary_category' );
+
+/**
+ * Add URL rewrite rule for primary-category
+ */
+function rewrite_rule() {
+	add_rewrite_rule( '^primary-category/([0-9]+)/?', 'index.php?primary_category_id=$matches[1]', 'top' );
+}
+
+add_action( 'init', 'rewrite_rule' );
