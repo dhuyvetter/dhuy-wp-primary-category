@@ -78,33 +78,60 @@ add_action( 'save_post', 'save_meta_box' );
  *
  * @param int $primary_category Category ID
  *
- * @return array $query WordPress Query
+ * @return string $result List of posts
  */
 function get_posts_by_primary_category( $primary_category ) {
-	$primary_category = (int) $primary_category;
 	if ( ! $primary_category > 0 ) {
 		return;
 	}
 
-	$meta_query_args = array(
-		array(
+	$result = wp_cache_get( $primary_category, 'dhuy_posts_by_primary_category' );
+	if ( false === $result ) {
+		$meta_query_args = array(
 			'key'     => 'dhuy_primary_category',
 			'value'   => $primary_category,
 			'compare' => '='
-		)
-	);
-	$query           = new WP_Meta_Query( $meta_query_args );
+		);
+		$query           = new WP_Query( $meta_query_args );
 
-	return $query;
+		// The Loop
+		if ( $query->have_posts() ) {
+			$result = '<ul>';
+			while ( $query->have_posts() ) {
+				$query->the_post();
+				$result .= '<li>' . get_the_title() . '</li>';
+			}
+			$result .= '</ul>';
+			/* Restore original Post Data */
+			wp_reset_postdata();
+		} else {
+			$result = __( 'No posts with this primary category', 'dhuy' );
+		}
+
+		wp_cache_set( $primary_category, 'dhuy_posts_by_primary_category', $result );
+	}
+
+	return $result;
 }
-
-add_filter( 'dhuy_get_posts_by_primary_category', 'get_posts_by_primary_category' );
 
 /**
- * Add URL rewrite rule for primary-category
+ * Primary Category archive shortcode
+ *
+ * @param $atts
+ *
+ * @return string
  */
-function rewrite_rule() {
-	add_rewrite_rule( '^primary-category/([0-9]+)/?', 'index.php?primary_category_id=$matches[1]', 'top' );
+function shortcode_function( $atts ) {
+	$cat_id = null;
+	if ( isset( $atts['id'] ) ) {
+		$cat_id = (int) $atts['id'];
+	} elseif ( isset( $atts['slug'] ) ) {
+		$category = get_category_by_slug( $atts['slug'] );
+		$cat_id   = $category->term_id;
+	}
+	$return = get_posts_by_primary_category( $cat_id );
+
+	return $return;
 }
 
-add_action( 'init', 'rewrite_rule' );
+add_shortcode( 'dhuy_primary_category_archive', 'shortcode_function' );
