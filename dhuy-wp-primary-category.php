@@ -51,12 +51,12 @@ function display_meta_box( $post ) {
  */
 function save_meta_box( $post_id ) {
 	if ( ! isset( $_POST["dhuy_primary_category"] ) ) {
-		return;
+		return null;
 	}
 
 	// verify our nonce
 	if ( ! wp_verify_nonce( $_POST['dhuy_primary_category_save_nonce'], 'dhuy_primary_category_save' ) ) {
-		return;
+		return null;
 	}
 
 	$primary_category = (int) $_POST["dhuy_primary_category"];
@@ -74,64 +74,66 @@ function save_meta_box( $post_id ) {
 add_action( 'save_post', 'save_meta_box' );
 
 /**
+ * Primary Category archive shortcode
  * Get all posts with given category as primary category
  *
- * @param int $primary_category Category ID
+ * @param $atts
  *
  * @return string $result List of posts
  */
-function get_posts_by_primary_category( $primary_category ) {
-	if ( ! $primary_category > 0 ) {
-		return;
+function get_posts_by_primary_category( $atts ) {
+	$cat_id = null;
+	if ( isset( $atts['id'] ) ) {
+		$cat_id = (int) $atts['id'];
+		if ( ! $cat_id > 0 ) {
+			return __( 'Invalid id in shortcode', 'dhuy' );
+		}
+	} elseif ( isset( $atts['slug'] ) ) {
+		$result = wp_cache_get( $atts['slug'], 'dhuy_posts_by_primary_category' );
+		if ( false !== $result ) {
+			return $result;
+		}
+		$category = get_category_by_slug( $atts['slug'] );
+		if ( ! $category ) {
+			return __( 'Invalid slug in shortcode', 'dhuy' );
+		}
+		$cat_id = $category->term_id;
 	}
 
-	$result = wp_cache_get( $primary_category, 'dhuy_posts_by_primary_category' );
-	if ( false === $result ) {
-		$meta_query_args = array(
-			'key'     => 'dhuy_primary_category',
-			'value'   => $primary_category,
-			'compare' => '='
-		);
-		$query           = new WP_Query( $meta_query_args );
+	$result = wp_cache_get( $cat_id, 'dhuy_posts_by_primary_category' );
+	if ( false !== $result ) {
+		return $result;
+	}
+	$args  = array(
+		'post_type'  => 'any',
+		'meta_key'   => 'dhuy_primary_category',
+		'meta_query' => array(
+			'key'   => 'dhuy_primary_category',
+			'value' => $cat_id,
+		)
+	);
+	$query = new WP_Query( $args );
 
-		// The Loop
-		if ( $query->have_posts() ) {
-			$result = '<ul>';
-			while ( $query->have_posts() ) {
-				$query->the_post();
-				$result .= '<li>' . get_the_title() . '</li>';
-			}
-			$result .= '</ul>';
-			/* Restore original Post Data */
-			wp_reset_postdata();
-		} else {
-			$result = __( 'No posts with this primary category', 'dhuy' );
+	// The Loop
+	if ( $query->have_posts() ) {
+		$result = '<ul>';
+		while ( $query->have_posts() ) {
+			$query->the_post();
+			$result .= '<li>' . get_the_title() . '</li>';
 		}
+		$result .= '</ul>';
+		/* Restore original Post Data */
+		wp_reset_postdata();
+	} else {
+		$result = __( 'No posts with this primary category', 'dhuy' );
+	}
 
-		wp_cache_set( $primary_category, 'dhuy_posts_by_primary_category', $result );
+	wp_cache_set( $cat_id, 'dhuy_posts_by_primary_category', $result );
+	if ( isset( $atts['slug'] ) ) {
+		wp_cache_set( $atts['slug'], 'dhuy_posts_by_primary_category', $result );
 	}
 
 	return $result;
 }
 
-/**
- * Primary Category archive shortcode
- *
- * @param $atts
- *
- * @return string
- */
-function shortcode_function( $atts ) {
-	$cat_id = null;
-	if ( isset( $atts['id'] ) ) {
-		$cat_id = (int) $atts['id'];
-	} elseif ( isset( $atts['slug'] ) ) {
-		$category = get_category_by_slug( $atts['slug'] );
-		$cat_id   = $category->term_id;
-	}
-	$return = get_posts_by_primary_category( $cat_id );
-
-	return $return;
-}
-
-add_shortcode( 'dhuy_primary_category_archive', 'shortcode_function' );
+add_shortcode( 'dhuy_primary_category_archive', 'get_posts_by_primary_category' );
